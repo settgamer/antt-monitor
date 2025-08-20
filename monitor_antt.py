@@ -10,10 +10,10 @@ EMAIL_TO = os.getenv("EMAIL_TO")
 
 SAVE_FILE = "ultima_noticia.txt"
 
-# URL base para busca gov.br ANTT, usando query com termos exatos (pode ajustar se quiser)
+# URL base para busca gov.br ANTT, usando só um termo genérico
 BUSCA_URL = "https://www.gov.br/antt/pt-br/search?origem=form&SearchableText="
 
-# Frases para filtrar títulos que interessam
+# Frases para filtrar títulos no Python (mesmo que a busca não suporte OR)
 TERMS = [
     "Tabelas de frete atualizadas:",
     "ANTT reajusta tabela dos pisos mínimos de frete",
@@ -21,7 +21,7 @@ TERMS = [
 ]
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+    "User-Agent": "Mozilla/5.0"
 }
 
 def enviar_email(titulo, url):
@@ -57,8 +57,9 @@ def salvar_ultima_noticia(titulo):
     print("💾 Última notícia salva com sucesso.")
 
 def buscar_noticias():
-    query = " OR ".join(TERMS)
-    url_busca = BUSCA_URL + requests.utils.quote(query)
+    # Usar só o primeiro termo para busca simples
+    termo_busca = TERMS[0]
+    url_busca = BUSCA_URL + requests.utils.quote(termo_busca)
     print(f"🌐 Buscando notícias em: {url_busca}")
 
     try:
@@ -70,7 +71,6 @@ def buscar_noticias():
 
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    # No gov.br, notícias aparecem em <div class="results"> e cada notícia em <div class="result-item">
     resultados = soup.select("div.results div.result-item")
 
     for item in resultados:
@@ -80,7 +80,7 @@ def buscar_noticias():
         titulo = titulo_tag.get_text(strip=True)
         link = titulo_tag.get("href")
 
-        # Filtrar só títulos que contenham algum termo da lista (case insensitive)
+        # Filtrar só títulos que contenham qualquer um dos termos (case insensitive)
         if any(term.lower() in titulo.lower() for term in TERMS):
             print(f"🔍 Notícia filtrada: {titulo}")
             return titulo, link

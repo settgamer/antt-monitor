@@ -71,7 +71,7 @@ def buscar_noticias_antt(url):
     # Configurar o Selenium
     chrome_options = Options()
     chrome_options.add_argument(f"user-agent={random.choice(USER_AGENTS)}")
-    chrome_options.add_argument("--headless")  # Executar sem abrir o navegador
+    chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
@@ -101,7 +101,7 @@ def buscar_noticias_antt(url):
         result_list = soup.find('ul', class_='searchResults noticias')
         if not result_list:
             print("⚠️ Lista de resultados não encontrada (ul.searchResults.noticias).")
-            # Tentar um seletor alternativo
+            # Tentar seletores alternativos
             result_list_alt = soup.find('ul', class_=re.compile(r'searchResults.*'))
             if result_list_alt:
                 print(f"✅ Lista alternativa encontrada: {result_list_alt.get('class')}")

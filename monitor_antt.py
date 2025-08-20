@@ -4,26 +4,29 @@ import smtplib
 from email.mime.text import MIMEText
 import re
 import os
-import sys
 
 # Configs de e-mail (vindas dos Secrets do GitHub)
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASS = os.getenv("EMAIL_PASS")
 EMAIL_TO = os.getenv("EMAIL_TO")
 
-# URL da ANTT Legis
-URL = "https://anttlegis.antt.gov.br/action/UrlPublicasAction.php?acao=abrirAtoPublico&num_ato=&sgl_tipo=RES&sgl_orgao=DG/ANTT/MT&vlr_ano=2025&seq_ato=000&cod_modulo=161&cod_menu=5408"
+# Lista de URLs para tentar
+URLS = [
+    "https://anttlegis.antt.gov.br/action/UrlPublicasAction.php?acao=abrirAtoPublico&num_ato=&sgl_tipo=RES&sgl_orgao=DG/ANTT/MT&vlr_ano=2025&seq_ato=000&cod_modulo=161&cod_menu=5408",
+    "https://www.antt.gov.br/assuntos/atos-normativos/resolucoes",
+    "https://anttlegis.antt.gov.br/",
+    "https://www.antt.gov.br/assuntos/legislacao",
+    "https://anttlegis.antt.gov.br/action/UrlPublicasAction.php?acao=pesquisar"
+]
 
-# Arquivo no repositório que guarda a última resolução
 SAVE_FILE = "ultima_resolucao.txt"
-
 
 def enviar_email(nova_res):
     if not EMAIL_USER or not EMAIL_PASS or not EMAIL_TO:
         print("❌ Variáveis de ambiente de e-mail não configuradas corretamente.")
         return
 
-    msg = MIMEText(f"⚠️ Nova resolução ANTT detectada: {nova_res}\n\nConfira no site: {URL}")
+    msg = MIMEText(f"⚠️ Nova resolução ANTT detectada: {nova_res}\n\nConfira no site da ANTT.")
     msg["Subject"] = f"Nova Resolução ANTT detectada: {nova_res}"
     msg["From"] = EMAIL_USER
     msg["To"] = EMAIL_TO
@@ -39,31 +42,31 @@ def enviar_email(nova_res):
     except Exception as e:
         print(f"❌ Erro ao enviar e-mail: {e}")
 
-
 def buscar_ultima_resolucao():
-    print("🌐 Acessando site da ANTT...")
-    try:
-        resp = requests.get(URL, timeout=15)
-        resp.raise_for_status()
-    except Exception as e:
-        print(f"❌ Erro ao acessar o site da ANTT: {e}")
-        return None
+    maior_resolucao = None
+    for url in URLS:
+        print(f"🌐 Tentando acessar: {url}")
+        try:
+            resp = requests.get(url, timeout=15)
+            resp.raise_for_status()
+        except Exception as e:
+            print(f"❌ Erro ao acessar {url}: {e}")
+            continue
 
-    soup = BeautifulSoup(resp.text, "html.parser")
-    textos = soup.get_text()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        textos = soup.get_text()
 
-    # Expressão regular para encontrar números de resoluções
-    match = re.findall(r"Resoluç[aã]o\s*n[ºo]?\s*(\d+)", textos, re.IGNORECASE)
+        match = re.findall(r"Resoluç[aã]o\s*n[ºo]?\s*(\d+)", textos, re.IGNORECASE)
+        if match:
+            numeros = list(map(int, match))
+            local_max = max(numeros)
+            print(f"📄 Resoluções encontradas em {url}: {numeros} | Maior: {local_max}")
+            if maior_resolucao is None or local_max > maior_resolucao:
+                maior_resolucao = local_max
+        else:
+            print(f"⚠️ Nenhuma resolução encontrada em {url}.")
 
-    if match:
-        numeros = list(map(int, match))
-        maior = max(numeros)
-        print(f"📄 Resoluções encontradas: {numeros}")
-        return maior
-
-    print("⚠️ Site acessado, mas nenhuma resolução foi encontrada.")
-    return None
-
+    return maior_resolucao
 
 def ler_ultima_local():
     if os.path.exists(SAVE_FILE):
@@ -71,16 +74,13 @@ def ler_ultima_local():
             return int(f.read().strip())
     return 0
 
-
 def salvar_ultima_resolucao(numero):
     with open(SAVE_FILE, "w") as f:
         f.write(str(numero))
     print("💾 Última resolução salva com sucesso.")
 
-
 def main():
-    # Modo de teste: forçar envio de e-mail mesmo sem acessar o site
-    MODO_TESTE = False  # <- Troque para False para voltar ao comportamento normal
+    MODO_TESTE = False  # Troque para True para forçar envio de e-mail
 
     if MODO_TESTE:
         print("🧪 MODO TESTE ATIVADO — enviando e-mail de teste.")
@@ -102,7 +102,5 @@ def main():
     else:
         print("ℹ️ Nenhuma resolução nova detectada.")
 
-
 if __name__ == "__main__":
     main()
-

@@ -80,7 +80,7 @@ def salvar_ultima_resolucao(numero):
 
 def main():
     # Modo de teste: forçar envio de e-mail mesmo sem acessar o site
-    MODO_TESTE = True  # <- Troque para False para voltar ao comportamento normal
+    MODO_TESTE = False  # <- Troque para False para voltar ao comportamento normal
 
     if MODO_TESTE:
         print("🧪 MODO TESTE ATIVADO — enviando e-mail de teste.")
@@ -105,3 +105,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

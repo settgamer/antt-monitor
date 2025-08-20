@@ -6,18 +6,20 @@ import smtplib
 from email.mime.text import MIMEText
 import os
 
-# Configurações de e-mail (do GitHub Secrets)
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASS = os.getenv("EMAIL_PASS")
 EMAIL_TO = os.getenv("EMAIL_TO")
 
 GOOGLE_SEARCH_URL = "https://www.google.com/search"
-SEARCH_QUERY = '"Tabelas de frete atualizadas: ANTT" OR "ANTT reajusta tabela dos pisos mínimos de frete"'
 
-# Data limite
+# Queries separadas (sem aspas e OR)
+SEARCH_QUERIES = [
+    "Tabelas de frete atualizadas ANTT",
+    "ANTT reajusta tabela dos pisos mínimos de frete"
+]
+
 DATA_LIMITE = datetime.strptime("18/07/2025", "%d/%m/%Y")
 
-# Termos para filtrar títulos relevantes (case-insensitive)
 TITULOS_FILTRO = [
     "Tabelas de frete atualizadas:",
     "ANTT reajusta tabela dos pisos mínimos de frete"
@@ -45,7 +47,7 @@ def enviar_email(titulo, link, data):
     except Exception as e:
         print(f"❌ Erro ao enviar e-mail: {e}")
 
-def buscar_noticias_google():
+def buscar_noticias_google(query):
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -53,13 +55,13 @@ def buscar_noticias_google():
         )
     }
     params = {
-        "q": SEARCH_QUERY,
+        "q": query,
         "hl": "pt-BR",
         "gl": "br",
         "num": "10"
     }
 
-    print(f"🌐 Pesquisando no Google: {SEARCH_QUERY}")
+    print(f"🌐 Pesquisando no Google: {query}")
     try:
         resp = requests.get(GOOGLE_SEARCH_URL, headers=headers, params=params, timeout=15)
         resp.raise_for_status()
@@ -99,7 +101,6 @@ def extrair_data(texto):
         'julho': 7, 'agosto': 8, 'setembro': 9, 'outubro': 10, 'novembro': 11, 'dezembro': 12
     }
 
-    # dd/mm/yyyy
     match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', texto)
     if match:
         try:
@@ -107,7 +108,6 @@ def extrair_data(texto):
         except:
             pass
 
-    # dd de mês de yyyy
     match = re.search(r'(\d{1,2}) de (\w+) de (\d{4})', texto.lower())
     if match:
         dia = int(match.group(1))
@@ -123,19 +123,29 @@ def extrair_data(texto):
     return None
 
 def main():
-    noticias = buscar_noticias_google()
-    if not noticias:
+    todas_noticias = []
+    for q in SEARCH_QUERIES:
+        resultados = buscar_noticias_google(q)
+        todas_noticias.extend(resultados)
+
+    if not todas_noticias:
         print("⚠️ Nenhuma notícia encontrada na pesquisa Google.")
         return
 
-    ultima = noticias[-1]
+    # Ordenar por data, ignorando None, colocando None no fim
+    todas_noticias = sorted(
+        todas_noticias, 
+        key=lambda n: n['data'] or datetime.min, 
+        reverse=True
+    )
+
+    ultima = todas_noticias[0]
     data_ultima = ultima['data']
     data_ultima_str = data_ultima.strftime('%d/%m/%Y') if data_ultima else "sem data"
 
     print(f"🕵️‍♂️ Última notícia detectada: {ultima['titulo']} | {data_ultima_str}")
 
-    # Verifica condição para enviar email:
-    if (data_ultima and data_ultima > DATA_LIMITE and 
+    if (data_ultima and data_ultima > DATA_LIMITE and
         any(term.lower() in ultima['titulo'].lower() for term in TITULOS_FILTRO)):
         enviar_email(ultima['titulo'], ultima['link'], data_ultima)
     else:

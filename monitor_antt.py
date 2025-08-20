@@ -1,5 +1,3 @@
-import requests
-from bs4 import BeautifulSoup
 import re
 from datetime import datetime
 import smtplib
@@ -7,6 +5,11 @@ from email.mime.text import MIMEText
 import os
 import time
 import random
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from bs4 import BeautifulSoup
 
 # Configurações de ambiente
 EMAIL_USER = os.getenv("EMAIL_USER")
@@ -63,79 +66,88 @@ def enviar_email(titulo, link, data):
         print(f"❌ Erro ao enviar e-mail: {e}")
 
 def buscar_noticias_antt(url):
-    headers = {
-        "User-Agent": random.choice(USER_AGENTS),
-        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Referer": "https://www.gov.br/antt/pt-br",
-        "Connection": "keep-alive"
-    }
-
-    print(f"🌐 Pesquisando no site da ANTT: {url}")
+    print(f"🌐 Pesquisando no site da ANTT com Selenium: {url}")
+    
+    # Configurar o Selenium
+    chrome_options = Options()
+    chrome_options.add_argument(f"user-agent={random.choice(USER_AGENTS)}")
+    chrome_options.add_argument("--headless")  # Executar sem abrir o navegador
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--window-size=1920,1080")
+    
     try:
-        time.sleep(random.uniform(3, 6))  # Atraso para evitar bloqueio
-        session = requests.Session()
-        resp = session.get(url, headers=headers, timeout=15)
-        resp.raise_for_status()
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        driver.get(url)
+        time.sleep(5)  # Esperar o carregamento completo da página
+        html = driver.page_source
+        salvar_html(html, f"response_antt_selenium_{url.split('=')[-1].replace('+', '_')}.html")
+        
+        soup = BeautifulSoup(html, "html.parser")
+        resultados = []
+
+        # Log do HTML retornado
+        print(f"📝 HTML retornado (primeiros 200 caracteres): {soup.prettify()[:200]}...")
+        print(f"🔍 Primeiros divs encontrados: {[div.get('class') for div in soup.find_all('div')[:5]]}")
+
+        # Verificar mensagem de "nenhum resultado"
+        no_results = soup.find(string=re.compile(r'(nenhum resultado|sem resultados|não encontrado)', re.I))
+        if no_results:
+            print(f"⚠️ Mensagem encontrada: '{no_results}' - Nenhum resultado retornado pela busca.")
+            return []
+
+        # Buscar resultados na lista <ul class="searchResults noticias">
+        result_list = soup.find('ul', class_='searchResults noticias')
+        if not result_list:
+            print("⚠️ Lista de resultados não encontrada (ul.searchResults.noticias).")
+            # Tentar um seletor alternativo
+            result_list_alt = soup.find('ul', class_=re.compile(r'searchResults.*'))
+            if result_list_alt:
+                print(f"✅ Lista alternativa encontrada: {result_list_alt.get('class')}")
+                result_list = result_list_alt
+
+        if not result_list:
+            print("⚠️ Nenhuma lista de resultados encontrada, mesmo com seletor alternativo.")
+            return []
+
+        for item in result_list.find_all('li', class_=re.compile(r'item-collective.*')):
+            titulo_tag = item.find('span', class_='titulo')
+            link_tag = item.find('a', href=True)
+            data_tag = item.find('span', class_='data')
+            descricao_tag = item.find('span', class_='descricao')
+
+            if not titulo_tag or not link_tag or not data_tag:
+                print(f"⚠️ Resultado sem título, link ou data: {item.get_text(strip=True)[:50]}...")
+                continue
+
+            titulo = titulo_tag.get_text(strip=True)
+            link = link_tag['href']
+            if link.startswith('/'):
+                link = f"https://www.gov.br{link}"
+
+            data_texto = data_tag.get_text(strip=True)
+            data = extrair_data(data_texto)
+            snippet = descricao_tag.get_text(strip=True) if descricao_tag else ""
+
+            print(f"📄 Encontrado: {titulo} | Data: {data} | Link: {link}")
+
+            resultados.append({
+                "titulo": titulo,
+                "link": link,
+                "data": data,
+                "snippet": snippet
+            })
+
+        if not resultados:
+            print("⚠️ Nenhum resultado válido encontrado para esta busca.")
+        return resultados
+
     except Exception as e:
-        print(f"❌ Erro ao acessar o site da ANTT: {e}")
-        print(f"Resposta do servidor (primeiros 500 caracteres): {resp.text[:500]}...")
-        salvar_html(resp.text, f"error_response_antt_{url.split('=')[-1].replace('+', '_')}.html")
+        print(f"❌ Erro ao acessar o site da ANTT com Selenium: {e}")
         return []
-
-    # Salvar o HTML para depuração
-    salvar_html(resp.text, f"response_antt_{url.split('=')[-1].replace('+', '_')}.html")
-
-    soup = BeautifulSoup(resp.text, "html.parser")
-    resultados = []
-
-    # Log do HTML retornado
-    print(f"📝 HTML retornado (primeiros 200 caracteres): {soup.prettify()[:200]}...")
-    print(f"🔍 Primeiros divs encontrados: {[div.get('class') for div in soup.find_all('div')[:5]]}")
-
-    # Verificar mensagem de "nenhum resultado"
-    no_results = soup.find(string=re.compile(r'(nenhum resultado|sem resultados|não encontrado)', re.I))
-    if no_results:
-        print(f"⚠️ Mensagem encontrada: '{no_results}' - Nenhum resultado retornado pela busca.")
-        return []
-
-    # Buscar resultados na lista <ul class="searchResults noticias">
-    result_list = soup.find('ul', class_='searchResults noticias')
-    if not result_list:
-        print("⚠️ Lista de resultados não encontrada (ul.searchResults.noticias).")
-        return []
-
-    for item in result_list.find_all('li', class_='item-collective.nitf.content'):
-        titulo_tag = item.find('span', class_='titulo')
-        link_tag = item.find('a', href=True)
-        data_tag = item.find('span', class_='data')
-        descricao_tag = item.find('span', class_='descricao')
-
-        if not titulo_tag or not link_tag or not data_tag:
-            print(f"⚠️ Resultado sem título, link ou data: {item.get_text(strip=True)[:50]}...")
-            continue
-
-        titulo = titulo_tag.get_text(strip=True)
-        link = link_tag['href']
-        if link.startswith('/'):
-            link = f"https://www.gov.br{link}"
-
-        data_texto = data_tag.get_text(strip=True)
-        data = extrair_data(data_texto)
-        snippet = descricao_tag.get_text(strip=True) if descricao_tag else ""
-
-        print(f"📄 Encontrado: {titulo} | Data: {data} | Link: {link}")
-
-        resultados.append({
-            "titulo": titulo,
-            "link": link,
-            "data": data,
-            "snippet": snippet
-        })
-
-    if not resultados:
-        print("⚠️ Nenhum resultado válido encontrado para esta busca.")
-    return resultados
+    finally:
+        driver.quit()
 
 def extrair_data(texto):
     meses = {

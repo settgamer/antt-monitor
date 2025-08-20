@@ -2,8 +2,8 @@ name: Monitor ANTT
 
 on:
   schedule:
-    - cron: "0 10 * * *"   # roda todo dia 07h Brasília
-  workflow_dispatch:        # rodar manualmente também
+    - cron: "0 10 * * *"  # Roda todo dia às 07h Brasília
+  workflow_dispatch:      # Permite rodar manualmente
 
 jobs:
   run-monitor:
@@ -20,8 +20,15 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Instalar dependências
-        run: pip install -r requirements.txt
+      - name: Instalar dependências do sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Instalar dependências Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Rodar script
         env:
@@ -29,6 +36,12 @@ jobs:
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
         run: python monitor_antt.py
+
+      - name: Fazer upload dos arquivos HTML para depuração
+        uses: actions/upload-artifact@v3
+        with:
+          name: html-outputs
+          path: response_antt_selenium_*.html
 
       - name: Commit se houve atualização
         run: |

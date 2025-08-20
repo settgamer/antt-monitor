@@ -13,12 +13,10 @@ EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASS = os.getenv("EMAIL_PASS")
 EMAIL_TO = os.getenv("EMAIL_TO")
 
-GOOGLE_SEARCH_URL = "https://www.google.com/search"
-
-# Queries separadas
-SEARCH_QUERIES = [
-    "Tabelas de frete atualizadas ANTT",
-    "ANTT reajusta tabela dos pisos mínimos de frete"
+# URLs de busca no site da ANTT
+SEARCH_URLS = [
+    "https://www.gov.br/antt/pt-br/search?origem=form&SearchableText=Tabelas+de+frete+atualizadas+ANTT",
+    "https://www.gov.br/antt/pt-br/search?origem=form&SearchableText=ANTT+reajusta+tabela+dos+pisos+m%C3%ADnimos+de+frete"
 ]
 
 DATA_LIMITE = datetime.strptime("18/07/2025", "%d/%m/%Y")
@@ -64,76 +62,68 @@ def enviar_email(titulo, link, data):
     except Exception as e:
         print(f"❌ Erro ao enviar e-mail: {e}")
 
-def buscar_noticias_google(query):
+def buscar_noticias_antt(url):
     headers = {
         "User-Agent": random.choice(USER_AGENTS),
         "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Referer": "https://www.google.com/",
+        "Referer": "https://www.gov.br/antt/pt-br",
         "Connection": "keep-alive"
     }
-    params = {
-        "q": query,
-        "hl": "pt-BR",
-        "gl": "br",
-        "num": 10
-    }
 
-    print(f"🌐 Pesquisando no Google: {query}")
+    print(f"🌐 Pesquisando no site da ANTT: {url}")
     try:
-        time.sleep(random.uniform(3, 6))  # Atraso maior para evitar bloqueio
+        time.sleep(random.uniform(3, 6))  # Atraso para evitar bloqueio
         session = requests.Session()
-        resp = session.get(GOOGLE_SEARCH_URL, headers=headers, params=params, timeout=15)
+        resp = session.get(url, headers=headers, timeout=15)
         resp.raise_for_status()
     except Exception as e:
-        print(f"❌ Erro ao acessar Google: {e}")
+        print(f"❌ Erro ao acessar o site da ANTT: {e}")
         print(f"Resposta do servidor (primeiros 500 caracteres): {resp.text[:500]}...")
-        salvar_html(resp.text, f"error_response_{query.replace(' ', '_')}.html")
-        return []
-
-    # Verificar se a resposta contém um CAPTCHA ou redirecionamento
-    if "Please click here if you are not redirected" in resp.text or "captcha" in resp.text.lower():
-        print("⚠️ Possível CAPTCHA ou redirecionamento detectado. O Google pode estar bloqueando a requisição.")
-        salvar_html(resp.text, f"captcha_response_{query.replace(' ', '_')}.html")
+        salvar_html(resp.text, f"error_response_antt_{url.split('=')[-1].replace('+', '_')}.html")
         return []
 
     # Salvar o HTML para depuração
-    salvar_html(resp.text, f"response_{query.replace(' ', '_')}.html")
+    salvar_html(resp.text, f"response_antt_{url.split('=')[-1].replace('+', '_')}.html")
 
     soup = BeautifulSoup(resp.text, "html.parser")
     resultados = []
 
     # Log do HTML retornado
     print(f"📝 HTML retornado (primeiros 200 caracteres): {soup.prettify()[:200]}...")
+    # Log das classes dos primeiros divs
+    print(f"🔍 Primeiros divs encontrados: {[div.get('class') for div in soup.find_all('div')[:5]]}")
 
-    # Tentar capturar resultados com seletores genéricos
-    for g in soup.find_all('div', class_=re.compile(r'g|result|rso|yuRUbf')):
-        titulo_tag = g.find('h3')
-        link_tag = g.find('a', href=True)
-        snippet_tag = g.find('div', class_=re.compile(r'snippet|description|VwiC3b|hgKElc'))
+    # Seletores para resultados de busca no site da ANTT
+    for item in soup.find_all('div', class_=re.compile(r'article|noticia|item|content')):
+        titulo_tag = item.find('h2') or item.find('h3')
+        link_tag = item.find('a', href=True)
+        data_tag = item.find('span', class_=re.compile(r'date|data|published|time'))
 
         if not titulo_tag or not link_tag:
-            print(f"⚠️ Resultado sem título ou link: {g.text[:50]}...")
+            print(f"⚠️ Resultado sem título ou link: {item.text[:50]}...")
             continue
 
         titulo = titulo_tag.get_text(strip=True)
         link = link_tag['href']
-        snippet = snippet_tag.get_text(separator=' ', strip=True) if snippet_tag else ""
+        # Completar o link se for relativo
+        if link.startswith('/'):
+            link = f"https://www.gov.br{link}"
 
-        data = extrair_data(snippet)
+        data_texto = data_tag.get_text(strip=True) if data_tag else ""
+        data = extrair_data(data_texto or item.get_text())
+
         print(f"📄 Encontrado: {titulo} | Data: {data} | Link: {link}")
 
         resultados.append({
             "titulo": titulo,
             "link": link,
             "data": data,
-            "snippet": snippet
+            "snippet": item.get_text(strip=True)[:200]
         })
 
     if not resultados:
-        print("⚠️ Nenhum resultado válido encontrado para esta query.")
-        # Log dos primeiros elementos encontrados para depuração
-        print(f"🔍 Primeiros divs encontrados: {[div.get('class') for div in soup.find_all('div')[:5]]}")
+        print("⚠️ Nenhum resultado válido encontrado para esta busca.")
     return resultados
 
 def extrair_data(texto):
@@ -181,22 +171,30 @@ def extrair_data(texto):
 
 def main():
     todas_noticias = []
-    for q in SEARCH_QUERIES:
-        resultados = buscar_noticias_google(q)
+    for url in SEARCH_URLS:
+        resultados = buscar_noticias_antt(url)
         todas_noticias.extend(resultados)
 
     if not todas_noticias:
-        print("⚠️ Nenhuma notícia encontrada na pesquisa Google.")
+        print("⚠️ Nenhuma notícia encontrada na pesquisa ANTT.")
         return
 
+    # Eliminar duplicatas com base no link
+    seen_links = set()
+    noticias_unicas = []
+    for noticia in todas_noticias:
+        if noticia['link'] not in seen_links:
+            seen_links.add(noticia['link'])
+            noticias_unicas.append(noticia)
+
     # Ordenar por data, ignorando None, colocando None no fim
-    todas_noticias = sorted(
-        todas_noticias, 
+    noticias_unicas = sorted(
+        noticias_unicas, 
         key=lambda n: n['data'] or datetime.min, 
         reverse=True
     )
 
-    ultima = todas_noticias[0]
+    ultima = noticias_unicas[0]
     data_ultima = ultima['data']
     data_ultima_str = data_ultima.strftime('%d/%m/%Y') if data_ultima else "sem data"
 

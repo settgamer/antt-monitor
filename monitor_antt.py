@@ -43,6 +43,14 @@ def salvar_html(texto, nome_arquivo):
         f.write(texto)
     print(f"📝 HTML salvo em: {nome_arquivo}")
 
+def salvar_ultima_resolucao(titulo, data, link):
+    """Salva a última resolução detectada no arquivo ultima_resolucao.txt."""
+    data_str = data.strftime('%d/%m/%Y') if data else "sem data"
+    conteudo = f"Título: {titulo}\nData: {data_str}\nLink: {link}\n"
+    with open("ultima_resolucao.txt", "w", encoding="utf-8") as f:
+        f.write(conteudo)
+    print(f"📝 Última resolução salva em ultima_resolucao.txt: {titulo} | {data_str}")
+
 def enviar_email(titulo, link, data):
     if not all([EMAIL_USER, EMAIL_PASS, EMAIL_TO]):
         print("❌ Variáveis de ambiente de e-mail não configuradas corretamente.")
@@ -222,6 +230,9 @@ def main():
     data_ultima_str = data_ultima.strftime('%d/%m/%Y') if data_ultima else "sem data"
 
     print(f"🕵️‍♂️ Última notícia detectada: {ultima['titulo']} | {data_ultima_str}")
+
+    # Salvar a última resolução no arquivo
+    salvar_ultima_resolucao(ultima['titulo'], ultima['data'], ultima['link'])
 
     if (data_ultima and data_ultima > DATA_LIMITE and
         any(term.lower() in ultima['titulo'].lower() for term in TITULOS_FILTRO)):

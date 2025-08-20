@@ -36,6 +36,12 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"
 ]
 
+def salvar_html(texto, nome_arquivo):
+    """Salva o HTML retornado em um arquivo para depuração."""
+    with open(nome_arquivo, "w", encoding="utf-8") as f:
+        f.write(texto)
+    print(f"📝 HTML salvo em: {nome_arquivo}")
+
 def enviar_email(titulo, link, data):
     if not all([EMAIL_USER, EMAIL_PASS, EMAIL_TO]):
         print("❌ Variáveis de ambiente de e-mail não configuradas corretamente.")
@@ -62,7 +68,9 @@ def buscar_noticias_google(query):
     headers = {
         "User-Agent": random.choice(USER_AGENTS),
         "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Referer": "https://www.google.com/",
+        "Connection": "keep-alive"
     }
     params = {
         "q": query,
@@ -73,30 +81,36 @@ def buscar_noticias_google(query):
 
     print(f"🌐 Pesquisando no Google: {query}")
     try:
-        time.sleep(random.uniform(2, 5))  # Atraso maior para evitar bloqueio
-        resp = requests.get(GOOGLE_SEARCH_URL, headers=headers, params=params, timeout=15)
+        time.sleep(random.uniform(3, 6))  # Atraso maior para evitar bloqueio
+        session = requests.Session()
+        resp = session.get(GOOGLE_SEARCH_URL, headers=headers, params=params, timeout=15)
         resp.raise_for_status()
     except Exception as e:
         print(f"❌ Erro ao acessar Google: {e}")
         print(f"Resposta do servidor (primeiros 500 caracteres): {resp.text[:500]}...")
+        salvar_html(resp.text, f"error_response_{query.replace(' ', '_')}.html")
         return []
 
     # Verificar se a resposta contém um CAPTCHA ou redirecionamento
     if "Please click here if you are not redirected" in resp.text or "captcha" in resp.text.lower():
         print("⚠️ Possível CAPTCHA ou redirecionamento detectado. O Google pode estar bloqueando a requisição.")
+        salvar_html(resp.text, f"captcha_response_{query.replace(' ', '_')}.html")
         return []
+
+    # Salvar o HTML para depuração
+    salvar_html(resp.text, f"response_{query.replace(' ', '_')}.html")
 
     soup = BeautifulSoup(resp.text, "html.parser")
     resultados = []
 
-    # Log para depurar o HTML bruto
+    # Log do HTML retornado
     print(f"📝 HTML retornado (primeiros 200 caracteres): {soup.prettify()[:200]}...")
 
-    # Seletor mais genérico para capturar resultados
-    for g in soup.find_all('div', class_=re.compile(r'g|result|rso')):
+    # Tentar capturar resultados com seletores genéricos
+    for g in soup.find_all('div', class_=re.compile(r'g|result|rso|yuRUbf')):
         titulo_tag = g.find('h3')
         link_tag = g.find('a', href=True)
-        snippet_tag = g.find('div', class_=re.compile(r'snippet|description|VwiC3b'))
+        snippet_tag = g.find('div', class_=re.compile(r'snippet|description|VwiC3b|hgKElc'))
 
         if not titulo_tag or not link_tag:
             print(f"⚠️ Resultado sem título ou link: {g.text[:50]}...")

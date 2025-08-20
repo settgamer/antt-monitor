@@ -63,7 +63,6 @@ def buscar_noticias_google():
 
     resultados = []
 
-    # Resultados estão em divs com class 'tF2Cxc'
     for g in soup.find_all('div', class_='tF2Cxc'):
         titulo_tag = g.find('h3')
         link_tag = g.find('a', href=True)
@@ -93,7 +92,6 @@ def extrair_data(texto):
         'julho': 7, 'agosto': 8, 'setembro': 9, 'outubro': 10, 'novembro': 11, 'dezembro': 12
     }
 
-    # Exemplo dd/mm/yyyy
     match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', texto)
     if match:
         try:
@@ -101,7 +99,6 @@ def extrair_data(texto):
         except:
             pass
 
-    # Exemplo dd de mês de yyyy
     match = re.search(r'(\d{1,2}) de (\w+) de (\d{4})', texto.lower())
     if match:
         dia = int(match.group(1))
@@ -121,6 +118,16 @@ def main():
     if not noticias:
         print("⚠️ Nenhuma notícia encontrada na pesquisa Google.")
         return
+
+    print("📰 Notícias encontradas:")
+    for n in noticias:
+        data_str = n['data'].strftime('%d/%m/%Y') if n['data'] else "sem data"
+        print(f"- {n['titulo']} | {data_str} | {n['link']}")
+
+    ultima = noticias[-1]
+    data_ultima = ultima['data']
+    data_ultima_str = data_ultima.strftime('%d/%m/%Y') if data_ultima else "sem data"
+    print(f"\n🕵️‍♂️ Última notícia detectada: {ultima['titulo']} | {data_ultima_str}")
 
     noticias_recentes = [n for n in noticias if n["data"] and n["data"] >= DATA_LIMITE]
 

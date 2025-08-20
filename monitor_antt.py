@@ -94,14 +94,20 @@ def buscar_noticias_antt(url):
     # Log das classes dos primeiros divs
     print(f"🔍 Primeiros divs encontrados: {[div.get('class') for div in soup.find_all('div')[:5]]}")
 
-    # Seletores para resultados de busca no site da ANTT
-    for item in soup.find_all('div', class_=re.compile(r'article|noticia|item|content')):
-        titulo_tag = item.find('h2') or item.find('h3')
+    # Verificar se a página contém mensagem de "nenhum resultado"
+    no_results = soup.find(string=re.compile(r'(nenhum resultado|sem resultados|não encontrado)', re.I))
+    if no_results:
+        print(f"⚠️ Mensagem encontrada: '{no_results}' - Nenhum resultado retornado pela busca.")
+        return []
+
+    # Seletores ajustados para resultados de busca
+    for item in soup.find_all(['div', 'article'], class_=re.compile(r'search-result|article|content|item|noticia|result')):
+        titulo_tag = item.find(['h2', 'h3', 'a'])
         link_tag = item.find('a', href=True)
-        data_tag = item.find('span', class_=re.compile(r'date|data|published|time'))
+        data_tag = item.find(['span', 'time', 'div'], class_=re.compile(r'date|data|published|time|metadata'))
 
         if not titulo_tag or not link_tag:
-            print(f"⚠️ Resultado sem título ou link: {item.text[:50]}...")
+            print(f"⚠️ Resultado sem título ou link: {item.get_text(strip=True)[:50]}...")
             continue
 
         titulo = titulo_tag.get_text(strip=True)
@@ -110,8 +116,8 @@ def buscar_noticias_antt(url):
         if link.startswith('/'):
             link = f"https://www.gov.br{link}"
 
-        data_texto = data_tag.get_text(strip=True) if data_tag else ""
-        data = extrair_data(data_texto or item.get_text())
+        data_texto = data_tag.get_text(strip=True) if data_tag else item.get_text(strip=True)
+        data = extrair_data(data_texto)
 
         print(f"📄 Encontrado: {titulo} | Data: {data} | Link: {link}")
 

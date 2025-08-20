@@ -91,33 +91,38 @@ def buscar_noticias_antt(url):
 
     # Log do HTML retornado
     print(f"📝 HTML retornado (primeiros 200 caracteres): {soup.prettify()[:200]}...")
-    # Log das classes dos primeiros divs
     print(f"🔍 Primeiros divs encontrados: {[div.get('class') for div in soup.find_all('div')[:5]]}")
 
-    # Verificar se a página contém mensagem de "nenhum resultado"
+    # Verificar mensagem de "nenhum resultado"
     no_results = soup.find(string=re.compile(r'(nenhum resultado|sem resultados|não encontrado)', re.I))
     if no_results:
         print(f"⚠️ Mensagem encontrada: '{no_results}' - Nenhum resultado retornado pela busca.")
         return []
 
-    # Seletores ajustados para resultados de busca
-    for item in soup.find_all(['div', 'article'], class_=re.compile(r'search-result|article|content|item|noticia|result')):
-        titulo_tag = item.find(['h2', 'h3', 'a'])
-        link_tag = item.find('a', href=True)
-        data_tag = item.find(['span', 'time', 'div'], class_=re.compile(r'date|data|published|time|metadata'))
+    # Buscar resultados na lista <ul class="searchResults noticias">
+    result_list = soup.find('ul', class_='searchResults noticias')
+    if not result_list:
+        print("⚠️ Lista de resultados não encontrada (ul.searchResults.noticias).")
+        return []
 
-        if not titulo_tag or not link_tag:
-            print(f"⚠️ Resultado sem título ou link: {item.get_text(strip=True)[:50]}...")
+    for item in result_list.find_all('li', class_='item-collective.nitf.content'):
+        titulo_tag = item.find('span', class_='titulo')
+        link_tag = item.find('a', href=True)
+        data_tag = item.find('span', class_='data')
+        descricao_tag = item.find('span', class_='descricao')
+
+        if not titulo_tag or not link_tag or not data_tag:
+            print(f"⚠️ Resultado sem título, link ou data: {item.get_text(strip=True)[:50]}...")
             continue
 
         titulo = titulo_tag.get_text(strip=True)
         link = link_tag['href']
-        # Completar o link se for relativo
         if link.startswith('/'):
             link = f"https://www.gov.br{link}"
 
-        data_texto = data_tag.get_text(strip=True) if data_tag else item.get_text(strip=True)
+        data_texto = data_tag.get_text(strip=True)
         data = extrair_data(data_texto)
+        snippet = descricao_tag.get_text(strip=True) if descricao_tag else ""
 
         print(f"📄 Encontrado: {titulo} | Data: {data} | Link: {link}")
 
@@ -125,7 +130,7 @@ def buscar_noticias_antt(url):
             "titulo": titulo,
             "link": link,
             "data": data,
-            "snippet": item.get_text(strip=True)[:200]
+            "snippet": snippet
         })
 
     if not resultados:

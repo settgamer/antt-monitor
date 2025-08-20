@@ -79,6 +79,14 @@ def salvar_ultima_resolucao(numero):
 
 
 def main():
+    # Modo de teste: forçar envio de e-mail mesmo sem acessar o site
+    MODO_TESTE = True  # <- Troque para False para voltar ao comportamento normal
+
+    if MODO_TESTE:
+        print("🧪 MODO TESTE ATIVADO — enviando e-mail de teste.")
+        enviar_email("TESTE-9999")
+        return
+
     ultima_online = buscar_ultima_resolucao()
     if not ultima_online:
         print("🚫 Interrompendo: nenhuma resolução válida foi encontrada.")

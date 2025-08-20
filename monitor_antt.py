@@ -32,7 +32,8 @@ TITULOS_FILTRO = [
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"
 ]
 
 def enviar_email(titulo, link, data):
@@ -60,7 +61,8 @@ def enviar_email(titulo, link, data):
 def buscar_noticias_google(query):
     headers = {
         "User-Agent": random.choice(USER_AGENTS),
-        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
     }
     params = {
         "q": query,
@@ -71,22 +73,30 @@ def buscar_noticias_google(query):
 
     print(f"🌐 Pesquisando no Google: {query}")
     try:
-        time.sleep(random.uniform(1, 3))  # Atraso aleatório para evitar bloqueio
+        time.sleep(random.uniform(2, 5))  # Atraso maior para evitar bloqueio
         resp = requests.get(GOOGLE_SEARCH_URL, headers=headers, params=params, timeout=15)
         resp.raise_for_status()
     except Exception as e:
         print(f"❌ Erro ao acessar Google: {e}")
-        print(f"Resposta do servidor: {resp.text[:200]}...")  # Log para depuração
+        print(f"Resposta do servidor (primeiros 500 caracteres): {resp.text[:500]}...")
+        return []
+
+    # Verificar se a resposta contém um CAPTCHA ou redirecionamento
+    if "Please click here if you are not redirected" in resp.text or "captcha" in resp.text.lower():
+        print("⚠️ Possível CAPTCHA ou redirecionamento detectado. O Google pode estar bloqueando a requisição.")
         return []
 
     soup = BeautifulSoup(resp.text, "html.parser")
     resultados = []
 
-    # Atualizar o seletor com base na estrutura atual do Google (inspecionar a página)
-    for g in soup.find_all('div', class_=re.compile(r'g|result')):  # Mais genérico
+    # Log para depurar o HTML bruto
+    print(f"📝 HTML retornado (primeiros 200 caracteres): {soup.prettify()[:200]}...")
+
+    # Seletor mais genérico para capturar resultados
+    for g in soup.find_all('div', class_=re.compile(r'g|result|rso')):
         titulo_tag = g.find('h3')
         link_tag = g.find('a', href=True)
-        snippet_tag = g.find('div', class_=re.compile(r'snippet|description'))
+        snippet_tag = g.find('div', class_=re.compile(r'snippet|description|VwiC3b'))
 
         if not titulo_tag or not link_tag:
             print(f"⚠️ Resultado sem título ou link: {g.text[:50]}...")
@@ -97,7 +107,7 @@ def buscar_noticias_google(query):
         snippet = snippet_tag.get_text(separator=' ', strip=True) if snippet_tag else ""
 
         data = extrair_data(snippet)
-        print(f"📄 Encontrado: {titulo} | Data: {data} | Link: {link}")  # Log para depuração
+        print(f"📄 Encontrado: {titulo} | Data: {data} | Link: {link}")
 
         resultados.append({
             "titulo": titulo,
@@ -108,6 +118,8 @@ def buscar_noticias_google(query):
 
     if not resultados:
         print("⚠️ Nenhum resultado válido encontrado para esta query.")
+        # Log dos primeiros elementos encontrados para depuração
+        print(f"🔍 Primeiros divs encontrados: {[div.get('class') for div in soup.find_all('div')[:5]]}")
     return resultados
 
 def extrair_data(texto):
@@ -116,7 +128,7 @@ def extrair_data(texto):
         'julho': 7, 'agosto': 8, 'setembro': 9, 'outubro': 10, 'novembro': 11, 'dezembro': 12
     }
 
-    # Tenta formato DD/MM/YYYY
+    # Formato DD/MM/YYYY
     match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', texto)
     if match:
         try:
@@ -124,7 +136,7 @@ def extrair_data(texto):
         except:
             pass
 
-    # Tenta formato "DD de mês de YYYY"
+    # Formato "DD de mês de YYYY"
     match = re.search(r'(\d{1,2}) de (\w+) de (\d{4})', texto.lower())
     if match:
         dia = int(match.group(1))
@@ -137,7 +149,7 @@ def extrair_data(texto):
             except:
                 pass
 
-    # Tenta formato "DD mês YYYY" (sem "de")
+    # Formato "DD mês YYYY"
     match = re.search(r'(\d{1,2}) (\w+) (\d{4})', texto.lower())
     if match:
         dia = int(match.group(1))
@@ -150,7 +162,7 @@ def extrair_data(texto):
             except:
                 pass
 
-    print(f"⚠️ Nenhuma data extraída do texto: {texto[:100]}...")  # Log para depuração
+    print(f"⚠️ Nenhuma data extraída do texto: {texto[:100]}...")
     return None
 
 def main():
